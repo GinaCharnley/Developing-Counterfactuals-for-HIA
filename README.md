@@ -53,7 +53,7 @@ Topics explored in the tutorial include:
 We have explored several methodologies and while we hope some users may use our tutorial to deepen their understanding, we anticipate others may have specific climate data they want to explore counterfactuals for and the flow diagram provides a guide to user to the correct method for them. 
 
 <p align="center">
-  <img src="images/method_select.png" alt="Counterfactual climate decision tree.
+  <img src="images/Figure5.png" alt="Counterfactual climate decision tree.
 _Source_: Author's own" width="900">
 </p>
 
