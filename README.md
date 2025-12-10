@@ -1,4 +1,4 @@
-# Creating a Counterfactual for a Health Impact Attribution Study
+# Exploring Counterfactual Climates for Health Impact Attribution Studies
 
 **Detection and Attribution (D&A)** methods are a set of methodological approaches designed to disentangle the role of anthropogenic forcing in climate dynamics.
 
@@ -10,7 +10,7 @@ The field of detection and attribution grapples the core challenges of:
 
 <p align="right">
   <img src="images/detection_and_attribution.png" alt="The contributions of different forcings to the observed warming of global surface temperatures.
-_Source_: IPCC AR6" width="400">
+_Source_: IPCC AR6" width="700">
 </p>
 
 D&A has shifted to focus on several sectors of interest e.g., energy, agriculture
@@ -54,6 +54,13 @@ Topics explored in the tutorial include:
 - Stocastic weather generators 
 
 **Ensembling & incorporating a boostrap**
+
+We have explored several methodologies and while we hope some users may use our tutorial to deepen their understanding, we anticipate others may have specific climate data they want to explore counterfactuals for and the flow diagram provides a guide to user to the correct method for them. 
+
+<p align="right">
+  <img src="images/Figure5.png" alt="Counterfactual climate decision tree.
+_Source_: Author's own" width="700">
+</p>
 
 This is by no means an exhaustive list, but gives many options depending on the health outcome, climate variables of interest, spatial and temporal scales, and what you want to infer from your analysis.
 
