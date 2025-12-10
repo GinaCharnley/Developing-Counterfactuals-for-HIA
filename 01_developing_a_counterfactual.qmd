@@ -48,6 +48,16 @@ Limitations of event-based analysis also include the *exclusion of social determ
 
 ## Tutorial Structure
 
+1.  We first discuss the **generation and processing of the climate**, concentration and GMTA data used throughout the tutorial. No additional datasets are used.
+
+2.  We explore **climate trend counterfactuals** using two methods of **detrending**:
+
+    1.  **Residual-based** using GMTA creating a counterfactual climate variable for temperature, humidity and precipitation. We explore **linear** approaches in the code snippets and discuss the use of incorporating **non-linear** smoothers.
+
+    2.  **Data-driven decomposition** using the temperature data and two decomposition methods, **Singular Spectrum Analysis** and **Empirical Mode Decomposition**. We give a worked R example using SSA.
+
+3.  
+
 ## Data Generation and Processing
 
 We generated several synthetic climate datasets representing long-term monthly temperature, precipitation, and relative humidity (1920–2025), as well as daily temperatures with embedded extreme events (2010–2019). The long-term monthly values were constructed for a spatial domain covering the Delhi region on a 1° grid (28.5–29.5°N, 76.5–77.5°E) and the heatwave data were not location specific, however, they did include general global trends in temperatures. The objective was to simulate realistic climatological behaviour including trends, seasonality, spatial variation, and autocorrelated noise, while permitting controlled insertion and detection of heatwaves, over a temporal and spatial scale/resolution that was computationally un-intensive. These data are generated and saved in a csv format in the file *"02_synthetic_climate_data_generation"*.
@@ -63,7 +73,7 @@ The aim of creating a trend counterfactual is to remove the anthropogenic forcin
 *Table 1*. Summary of potential detrending methodologies which could be used to generate counterfactual climate variables. GMTA: Global mean temperature anomalies.
 
 | Method                       | Linear/Nonlinear | Model-based | Residuals used | GMTA forcing needed |
-|------------------------------|:-----------------|------------:|:--------------:|:-------------------:|
+|------------------|:-------------|-------------:|:------------:|:------------:|
 | Linear regression            | Linear           |         Yes |      Yes       |         Yes         |
 | General additive models      | Nonlinear        |         Yes |      Yes       |         Yes         |
 | Singular spectrum analysis   | Nonlinear        |          No |       No       |         No          |
@@ -78,33 +88,40 @@ Before getting starting with creating your own counterfactual using detrending, 
 
 ### Linear
 
-In order to develop a counterfactual using a model residuals-based detrending you need two datasets:
+In order to develop a counterfactual climate variable using a model residuals-based detrending you need two datasets:
 
 1.  A time-series of the **observed climate variable**, for the location and the scale that you want
-2.  Long-term global mean temperature anomalies (**GMTA**), which are a time-series of temperature anomalies relative to a pre-industrial baseline (1850-1900)
+2.  Long-term global mean temperature anomalies (**GMTA**), which are a time-series of temperature anomalies relative to a pre-industrial baseline
 
-Here, we make use of the [Berkeley Earth](https://berkeleyearth.org/data/) GMTA dataset, opting for the annual data at the pre-industrial period of 1850-1900.
+Now you have your data, you want to **regress out the anthropogenic trend** (as approximated by the GMTA) from your observed data. It should be noted that despite using this methodology for climate trend counterfactuals, you could also use it for a long-term time-series of event data, such as heatwaves.
 
-Now you have your data, you want to **regress out the anthropogenic trend** (as approximated by the GMTA) from your observed data. It should be noted that despite using this methodology for trend counterfactuals, you could also use it for a long-term time-series of event data, such as heatwaves.
+At each grid cell or location, regress the local climate variable on the GMTA, then subtract the fitted trend, which leaves you with a counterfactual that preserves local variability (e.g., El Niño), but removes global climate forcing.
 
-At each grid cell or location, regress the local variable (e.g., temperature) on the GMTA, then subtract the fitted trend, which leaves you with a counterfactual that preserves local variability (e.g., El Niño), but removes global climate forcing.
+You can use this methodology for temperature, but also for other climate variables such as precipitation and humidity, which are often highly influential to health outcomes, in the absence of complex climate models. Since precipitation and humidity are physically linked to temperature, you can use the smoothed GMTA as a proxy forcing variable for regression, assuming the main anthropogenic forcing signal is captured by temperature change.
+
+Due to more complex and spatially heterogeneous patterns in precipitation and humidity data, this approach may be more appropriate as they are potentially less likely to possess a long-term trend which can be detrended in the data-driven approaches.
 
 #### Load and Combine the Data
 
 ```{r load and merge}
 # Load the datasets 
-temp <- read.csv("climate/temperature.csv")
-gmta <- read.csv("gmta/anomalies.csv")
+temp <- read.csv("02_synthetic_climate_data_generation/temperature.csv")
+precip <- read.csv("02_synthetic_climate_data_generation/precipitation.csv")
+humid <- read.csv("02_synthetic_climate_data_generation/humidity.csv")
+gmta <- read.csv("03_gmta_processing/anomalies.csv")
 
 # Merge to one file for creating the counterfactual 
 climate_merged <- left_join(temp, gmta)
+climate_merged <- left_join(climate_merged, humid)
+climate_merged <- left_join(climate_merged, precip)
+climate_merged <- na.omit(climate_merged)
 ```
 
 #### Smoothing the GMTA
 
-In ATTRICI, you’re trying to estimate **counterfactual trajectories** for time series under hypothetical interventions. The GMTAs are essentially the **time-varying effect estimates** that form the building blocks for these counterfactuals.
+In ATTRICI, you’re trying to estimate **counterfactual trajectories** for time series under hypothetical interventions. The GMTA are essentially the **time-varying effect estimates** that form the building blocks for these counterfactual climates.
 
-However, raw GMTAs are often **noisy** because they are estimated from observational data with temporal fluctuations. If you use them directly, your counterfactual will inherit this noise. Smoothing them with SSA (more information on SSA later) makes the counterfactual trajectory **less noisy, more realistic, and preserves meaningful trends and cycles** rather than short-term fluctuations.
+However, raw GMTA are often **noisy** because they are estimated from observational data with temporal fluctuations. If you use them directly, your counterfactual climate variable will inherit this noise. Smoothing them with SSA (more information on SSA later) makes the counterfactual trajectory **less noisy, more realistic, and preserves meaningful trends and cycles** rather than short-term fluctuations.
 
 ```{r ssa smooth}
 # === Step 1: SSA decomposition on GMTA ===
@@ -139,15 +156,19 @@ climate_merged <- na.omit(climate_merged)
 climate_merged <- climate_merged %>%
   group_by(month) %>%
   mutate(
-    trend = predict(lm(temperature ~ smoothed_anomaly, data = pick(everything()))),
-    temp_cf = temperature - trend + mean(temperature, na.rm = TRUE)
+    trend_tmp = predict(lm(temperature ~ smoothed_anomaly, data = pick(everything()))),
+    temp_cf = temperature - trend_tmp + mean(temperature, na.rm = TRUE),
+    trend_pre = predict(lm(precipitation_mm ~ smoothed_anomaly, data = pick(everything()))),
+    prec_cf = precipitation_mm - trend_pre + mean(precipitation_mm, na.rm = TRUE),
+    trend_hum = predict(lm(humidity_percent ~ smoothed_anomaly, data = pick(everything()))),
+    humi_cf = humidity_percent - trend_hum + mean(humidity_percent, na.rm = TRUE)
   ) %>%
   ungroup()
 ```
 
 #### Plot
 
-To visualise the differences in the **observed v the counterfactual** below is a plot of the annual average temperature values for the full region.
+To visualise the differences in the **observed v the counterfactual** climate variables below is a plot of the annual average temperature values for the full region.
 
 ```{r plot 1}
 # Group by year and compute annual mean
@@ -155,26 +176,49 @@ annual_loc <- climate_merged %>%
   group_by(year) %>%
   summarise(
     temp = mean(temperature, na.rm = TRUE),
-    temp_cf = mean(temp_cf, na.rm = TRUE)
+    temp_cf = mean(temp_cf, na.rm = TRUE),
+    precip = mean(precipitation_mm, na.rm = TRUE),
+    precip_cf = mean(prec_cf, na.rm = TRUE),
+    humidity = mean(humidity_percent, na.rm = TRUE),
+    humid_cf = mean(humi_cf, na.rm = TRUE)
   )
 
 # Plot
-ggplot(annual_loc, aes(x = as.numeric(year))) +
-  geom_line(aes(y = temp), color = "#FF6F61", linewidth = 1, alpha = .6) +
-  geom_line(aes(y = temp_cf), color = "dodgerblue", linewidth = 1, alpha = .6) +
+p1 <- ggplot(annual_loc, aes(x = as.numeric(year))) +
+  geom_line(aes(y = temp), color = "red", linewidth = 1, alpha = .6) +
+  geom_line(aes(y = temp_cf), color = "#FF857A", linewidth = 1, alpha = .6) +
   theme_minimal() + 
-  labs(title = "Annual Observed (red) vs Counterfactual Temperature (blue)",
+  labs(title = "Annual Observed vs Counterfactual Temperature (faded shade)",
        y = "Temperature (°C)", x = "Year") +  
   theme(text = element_text(face = "bold"))  
+
+p2 <- ggplot(annual_loc, aes(x = as.numeric(year))) +
+  geom_line(aes(y = precip), color = "darkblue", size = .6) +
+  geom_line(aes(y = precip_cf), color = "dodgerblue", size = 1, alpha = 0.5) +
+  theme_minimal() + 
+  labs(title = "Annual Observed vs Counterfactual Precipitation (faded shade)",
+       y = "Precipitation (m)", x = "Year") +  
+  theme(text = element_text(face = "bold"))  
+
+p3 <- ggplot(annual_loc, aes(x = as.numeric(year))) +
+  geom_line(aes(y = humidity), color = "orange", size = .5) +
+  geom_line(aes(y = humid_cf), color = "#fbb48a", size = 1, alpha = 0.7) +
+  theme_minimal() + 
+  labs(title = "Annual Observed vs Counterfactual Humidity (faded shade)",
+       y = "Humidity (%)", x = "Year") +  
+  theme(text = element_text(face = "bold"))  
+ggpubr::ggarrange(p1, p2, p3, ncol = 1)
 ```
 
 #### Communication
 
 To extract the attribution figures you will take these values from your results:
 
--   $Y_{\text{hist}}$ = predicted health outcome using *observed* climate
+-   $Y_{\text{hist}}$ = predicted health outcome using *observed* climate variable
 
--   $Y_{\text{cf}}$ = predicted outcome using *counterfactual* climate
+-   $Y_{\text{cf}}$ = predicted outcome using *counterfactual* climate variable
+
+Holding other variables in your health-impact model at a baseline average.
 
 Then calculate the **Absolute Attribution**:
 
@@ -206,17 +250,17 @@ To do this, the method is the same as above, however, you can replace the simple
 
 -   **Generalized Additive Models (GAMs)** via the `mgcv` package
 
-Loess or GAM lets the relationship between global anomaly and the local climate variable **change shape** — it’s not forced to be a straight line. As these methods are very similar, the sole difference being the replacement of the linear term with a non-linear term, the data input is the same, along with the communication of the results.
+Loess or GAM lets the relationship between global anomalies and the local climate variable **change shape** — it’s not forced to be a straight line. As these methods are very similar, the sole difference being the replacement of the linear term with a non-linear term, the data input is the same, along with the communication of the results.
 
 ## Data-driven decomposition detrending
 
-You can generate counterfactuals without using your GMTAs (see Table above in "Trend Counterfactuals via Detrending" section). Using a method without GMTAs may be particularly desirable if you are not interested in temperature, as there are no anomaly data for other variables such as precipitation or humidity, and therefore you have to use the temperature anomalies as a proxy (more about this in the next section), which has its limitations.
+You can generate counterfactuals without using GMTA (see *Table 1*). Using a method without GMTA may be particularly desirable if you believe your variable of interest may not be well captured by the GMTA.
 
-Here, I provide details for two methods of creating a counterfactual using **data-driven decomposition methods**, which separate long-term trends from variability, allowing you to reconstruct a counterfactual by removing the trend-like component.
+Here, we provide details for two methods of creating a counterfactual using **data-driven decomposition methods**, which separate long-term trends from variability, allowing you to reconstruct a counterfactual by removing the trend-like component.
 
 ### 1. Singular Spectrum Analysis (SSA)
 
-SSA is already explored above, where we use it to smooth the GMTAs, before fitting them in the linear model. SSA is best for **smooth trends** and decomposes into trends + oscillations using **eigen-decomposition**.
+SSA was introduced above, where we use it to smooth the GMTA before fitting them in the linear model. SSA is best for **smooth trends** and decomposes into trends + oscillations using **eigen-decomposition**.
 
 **Setting the window length** $L$ **in SSA is a critical choice** because it controls how the time series is decomposed into interpretable components like **trend, oscillations, and noise**.
 
@@ -242,7 +286,7 @@ Your eigenvalues plot should look like a **scree plot**, with the first two comp
 
 ### 2. Empirical Mode Decomposition (EMD)
 
-EMD is better for **non-linear and adaptive** data and extracts **intrinsic mode functions (IMFs)** + the residual (trend).
+EMD is better for **non-linear and adaptive** data and extracts **intrinsic mode functions (IMFs)** plus the residual (trend).
 
 The plot should appear as a multi-panel **time-series of your IMFs**, with the top panel the original input signal, subsequent panels the IMFs and the bottom panel the residual or trend component.
 
@@ -254,7 +298,7 @@ You can inspect your IMFs visually to see which capture **noise, seasonal variat
 
 -   Last/Residual: Low frequency showing the trend or long-term signal (e.g., warming trend)
 
-You therefore want to reconstruct your counterfactual by **removing the low-frequency trend component**.
+You therefore want to reconstruct your counterfactual climate variable by **removing the low-frequency trend component**.
 
 Watch out for your **number of IMFs**, it can be a red flag that something is going on with your data:
 
@@ -264,7 +308,7 @@ Watch out for your **number of IMFs**, it can be a red flag that something is go
 
 -   \>12 possibly over-decomposed, the signal may be too noisy or incorrectly processed
 
-Additionally, any of the **detrending approaches** outlined above could be **used on your extreme events** to develop a pre-industrial event counterfactual.
+Additionally, any of the **detrending approaches** outlined above could be **used on extreme events** such as heatwaves, to develop a pre-industrial event counterfactual.
 
 #### Example using SSA
 
@@ -303,92 +347,11 @@ ggplot(monthly_loc, aes(x = as.numeric(year))) +
   theme(text = element_text(face = "bold"))  
 ```
 
-Note here that both methods are relatively **data hungry** and tends to work better on long time-series (the data are chosen here to speed computational time in the example). To maximise use and time, I would opt for **SSA** when using a **long time-series and wide geographic area** (particularly annual data which has a clearer trend with the seasonality removed, as its better for linear trends), and **EMD** for a **small geographic area** and a **shorter time-series** (although longer is going to make it perform better).
+Note here that both methods are relatively **data hungry** and tends to work better on long time-series (the data are chosen here to speed computational time in the example). To maximise use and time, we would opt for **SSA** when using a **long time-series and wide geographic area** (particularly annual data which has a clearer trend with the seasonality removed, as its better for linear trends), and **EMD** for a **small geographic area** and a **shorter time-series** (although longer is going to make it perform better).
 
-## Non-Temperature Counterfactuals
+## Incorporation of GHG Concentrations
 
-Unlike temperature, global mean anomalies for commonly used climate variables such as precipitation and humidity are less commonly used or straightforward, because:
-
--   **Precipitation** is spatially highly variable and influenced by many local/regional factors and is not as well captured in the models compared to temperature.
-
--   **Humidity** (e.g., relative humidity or specific humidity) also varies regionally and seasonally, and global means are less commonly reported as simple anomalies like temperature.
-
-A lack of global mean anomalies from pre-industrial times is a significant reason why most of HIA research has focused on heat and temperature. But you can create a counterfactual for variables like precipitation and humidity, which are often highly influential to health outcomes, in the absence of complex climate models using the same methods explored above for temperature.
-
-Due to more complex and spatially heterogeneous patterns in precipitation and humidity data, an important first step would be to plot a time-series of the data for the location of interest. If there is no long-term trend, then using a decomposition method would not be practical, as there would be no trend to decompose.
-
-Regardless of if there is/is not a trend, you can also use the same residual-based approach used for temperature, and apply this to precipitation or humidity using the linear or non-linear methods explored above. Since precipitation and humidity are physically linked to temperature, you can use the smoothed GMTA or the local temperature forced response as a proxy forcing variable for regression. This assumes the main anthropogenic forcing signal is captured by temperature change (which is a reasonable first approximation).
-
-### R Implementation
-
-#### Temperature change as a forcing proxy
-
-A simple method to start is by applying the linear model residual-based detrending to precipitation and humidity using smoothed GMTA as the forcing predictor. The data used here are the synthesised precipitation and humidity data for the same geographical and spatial scales and resolutions as described above in the "Data" section.
-
-```{r non-temp}
-# === Step 1: Load and merge the data ===
-precip <- read.csv("climate/precipitation.csv")
-humid <- read.csv("climate/humidity.csv")
-gmta <- read.csv("gmta/anomalies.csv")
-
-climate_merged2 <- left_join(precip, humid)
-climate_merged2 <- left_join(climate_merged2, gmta)
-climate_merged2 <- na.omit(climate_merged2)
-
-# === Step 2: Smooth the GMTA ===
-ssa_gmta <- ssa(climate_merged2$temperature_anomaly_annual, L = 10)
-gmta_trend <- reconstruct(ssa_gmta, groups = list(1:3))$F1
-climate_merged2$smoothed_anomaly <- gmta_trend
-
-# === Step 3: Fit the model and remove the trend ===
-climate_merged2 <- climate_merged2 %>%
-  group_by(month) %>%
-  mutate(
-    trend_pre = predict(lm(precipitation_mm ~ smoothed_anomaly, data = pick(everything()))),
-    pre_cf = precipitation_mm - trend_pre + mean(precipitation_mm, na.rm = TRUE)
-  ) %>% 
-  mutate(
-    trend_hum = predict(lm(humidity_percent ~ smoothed_anomaly, data = pick(everything()))),
-    hum_cf = humidity_percent - trend_hum + mean(precipitation_mm, na.rm = TRUE)
-  ) %>%
-  ungroup()
-```
-
-Plot the observed v counterfactual for precipitation and humidity.
-
-```{r plot 3}
-# Group by year and compute annual mean
-annual_loc2 <- climate_merged2 %>%
-  group_by(year) %>%
-  summarise(
-    precip = mean(precipitation_mm, na.rm = TRUE),
-    precip_cf = mean(pre_cf, na.rm = TRUE),
-    humidity = mean(humidity_percent, na.rm = TRUE),
-    humid_cf = mean(hum_cf, na.rm = TRUE)
-  )
-
-# Plot
-p1 <- ggplot(annual_loc2, aes(x = as.numeric(year))) +
-  geom_line(aes(y = precip), color = "dodgerblue", size = .6) +
-  geom_line(aes(y = precip_cf), color = "#93cccc", size = 1, alpha = 0.5) +
-  theme_minimal() + 
-  labs(title = "Annual Observed vs Counterfactual (faded shade)",
-       y = "Precipitation (m)", x = "Year") +  
-  theme(text = element_text(face = "bold"))  
-
-p2 <- ggplot(annual_loc2, aes(x = as.numeric(year))) +
-  geom_line(aes(y = humidity), color = "orange", size = .5) +
-  geom_line(aes(y = humid_cf), color = "#fbb48a", size = 1, alpha = 0.7) +
-  theme_minimal() + 
-  labs(title = "Annual Observed vs Counterfactual (faded shade)",
-       y = "Temperature (°C)", x = "Year") +  
-  theme(text = element_text(face = "bold"))  
-ggpubr::ggarrange(p1, p2, ncol = 2)
-```
-
-## Incorporation of Drivers
-
-Instead of using GMTA as your forcing variable, you may instead want to account for specific drivers like **CO₂ emissions** and **land-use change**. You can continue to use the ATTRICI-style detrending to accomplish this, but instead switch out your GMTA for a specific emitter or greenhouse gas concentration. You should only **include one driver at once**, (or GMTA), as these will all be **highly correlated** and make you $\beta$ values hard to interpret.
+Instead of using GMTA as your forcing variable, you may instead want to account for specific drivers like **CO₂ concentrations**. You can continue to use residual-based detrending to accomplish this, but instead switch out your GMTA for a specific greenhouse gas concentration. You should only **include one driver at once**, (or GMTA), as these will all be **highly correlated** and make you $\beta$ values hard to interpret.
 
 $$
 \mathrm{LocalClimate}_t = \alpha + \beta_1 \cdot \mathrm{CO}_2{}_t + \varepsilon_t
@@ -402,20 +365,16 @@ Where:
 
 -   $\varepsilon_t$: **residuals**, interpreted as the **counterfactual** climate in the absence of those forcings.
 
-The main advantage to doing this, is so that you can **attribute your health outcome to greenhouse gas emissions** or a **specific driver/emitter**, whereas, with solely GMTA, you can only attribute more generally to climate change/global warming.
+The main advantage to doing this, is so that you can **attribute your health outcome to** a **specific driver/emitter**, whereas, with solely GMTA, you can only attribute more generally to climate change/global warming.
 
 In order to complete this analysis, you will need a number of datasets:
 
 -   **Observed climate variable** (temperature, precipitation, humidity) — at monthly or annual resolution
--   **Driver time-series** (matched in time to your climate data) - Greenhouse gas concentrations and/or *emissions* e.g., CO₂, CH₄, N₂O, O₃ via burning of fossil fuels or land use change.
+-   **Concentration time-series** (matched in time to your climate data) - Greenhouse gas concentrations e.g., CO₂, CH₄, N₂O, O₃ via burning of fossil fuels or land use change.
 
-There is a more in-depth look into potential emitter concentrations and emissions data in a separate file labelled *"drivers.R"*. Here, the chosen data is also processed and cleaned. Some emissions data are country, industry or company dis-aggregated, however, it should be noted that if you intend to attribute a health outcome to any of these entities, it remains difficult because atmospheric mixing distributes pollutants globally.
+#### Regress using GHG Concentrations on Temperature
 
-It is worth nothing that here the incorporation of land use change is solely related to emissions created by changing land use, it would **not give a land use counterfactual** e.g., land cover in pre-industrial times. For this you would need to [HYDE](https://www.pbl.nl/en/hyde-history-database-of-the-global-environment) dataset (see link for more information).
-
-### R Implementation
-
-The example below includes the synthetic temperature data, with the exploration of three separate forcing components in the models, concentrations of atmospheric CO₂, all global fossil fuel emissions and all global land use emissions.
+The example below includes the temperature data, with the exploration of concentrations of atmospheric CO₂ as the forced component.
 
 ```{r drivers, message=FALSE}
 # === Step 1: Load driver data ===
@@ -451,7 +410,7 @@ climate_merged3 <- climate_merged3 %>%
 
 Plot the observed v counterfactual for the three different examples.
 
-```{r plot 4}
+```{r plot 3}
 # Group by year and compute annual mean
 annual_loc3 <- climate_merged3 %>%
   group_by(year) %>%
@@ -502,7 +461,7 @@ ggplot(annual_loc3, aes(x = as.numeric(year))) +
   )
 ```
 
-### Communication
+#### Communication
 
 The method outlined here would allow you to **attribute your health outcome to global greenhouse gas emissions** related to anthropogenic burning of fossil fuels and emissions related to land use change, or to the emissions or concentrations of a specific greenhouse gas (CO₂, CH₄, N₂O, O₃).
 
@@ -512,7 +471,7 @@ You could tailor this further to include single emitters, so that you could comp
 
 e.g., “A X% increase in \[health outcome\] over the study period is attributable to anthropogenic CH₄ emissions.”
 
-## Event Counterfactuals
+## Climate Event Counterfactuals
 
 So far these methods have only covered trend-to-trend attribution counterfactuals, but **event-to-event attribution for HIA** is also a growing field. It is particularly important to explore simple and novel methods of developing event counterfactuals for impact studies, as these will not be available in "off-the-shelf" datasets like ISIMIP and DAMIP.
 
@@ -548,7 +507,7 @@ Your conceptual steps for performing an event-to-event attribution are as follow
 
 You can either simulate a world **"without the event"**, which can include a trend-style approach e.g., you remove the trend outlier that relates to the event, or you simulate a world with a **"slightly different event"** e.g., a cyclone with 10% faster wind speed, a more slow moving event, an event which takes a different track etc and compare these to your health outcome of interest.
 
-## “World without the event” Counterfactual
+### “World without the event” Counterfactual
 
 The most simple method to assess the impacts of an extreme event of a health outcome is to simply **remove the outlier** which corresponds to the extreme event e.g., the heatwave, storm etc.
 
@@ -556,7 +515,7 @@ Two methods are used here to remove the events, the first being **Fourier regres
 
 Fouriers has sine/cosine waves which are called **Fourier harmonics**, these are the trend components and are similar to setting the L and F in SSA and EMD, respectively.
 
-### R Implementation
+#### Remove the heatwaves
 
 ```{r no event, message=FALSE}
 # === Step 1: Load simulated heatwave data ===
@@ -589,7 +548,7 @@ df$counterfactual_interp <- na.approx(df$counterfactual_interp, x = df$date, na.
 
 #### Plot
 
-```{r plot 5}
+```{r plot 4}
 # Filter for 3 random years
 sample_years <- sample(unique(year(df$date)), 3)
 plot_data <- df %>% 
@@ -619,7 +578,7 @@ ggplot(plot_data, aes(x = date)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Communication
+#### Communication
 
 If you're comparing to a **"no-event"** world:
 
@@ -629,19 +588,17 @@ If you're comparing to a **"no-event"** world:
 
 3.  "Under a plausible variant where the \[event\] was 10% less intense, our model estimates that the health impact would have been reduced by A cases. Conversely, in a variant 10% more intense, the burden could have increased by B cases, highlighting the sensitivity of health outcomes to event severity."
 
-## “World with different event” Counterfactual
+### “World with different event” Counterfactual
 
 There are a number of methods that you could use to simulate a **slightly different event**, and this will depend on what you want to find out and explore through the analysis and a trade off between **interpretability/simplicity** and **physical realism**.
 
 Suggested methods that will be explored here include:
 
-### 1. Qualitative storyline
+#### 1. Qualitative storyline
 
 The approach includes **manually changing the parameters of the event** to better understand how different elements of the event affected your health outcome e.g., 10% windier, 20% hotter etc. Here, the interest is less about the effect on the health outcome in **real world events**, but rather an **exploratory exercise.**
 
 Example - using the same synthetic heatwave data but making them **2% hotter**
-
-#### R Implementation
 
 ```{r story}
 # Convert those in the heatwave in 2% hotter 
@@ -653,9 +610,9 @@ df <- df %>%
   ))
 ```
 
-##### Plot
+#### Plot
 
-```{r plot 6}
+```{r plot 5}
 # Filter for 3 random years
 sample_years <- sample(unique(year(df$date)), 3)
 plot_data <- df %>% 
@@ -683,7 +640,7 @@ ggplot(plot_data, aes(x = date)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### 2. Based on empirical relationships in atmospheric thermodynamics
+#### 2. Based on empirical relationships in atmospheric thermodynamics
 
 Empirical relationships are global estimates and how weather translates regionally can be very different, therefore this is **better for larger spatial scales**. Some important and useful ones for generating a counterfactual include:
 
@@ -718,8 +675,6 @@ $$
 Additionally, it should be noted that this could work the other way **to generate a pre-industrial counterfactual** (e.g., 1.5°C cooler).
 
 Example - creating a **2 degrees Celsius counterfactual** for the same heatwave data from above, and sythesises water vapor, precipitation and convective intensity from temperature using the above relationships.
-
-#### R Implementation
 
 ```{r formulas}
 # === Step 1: Generate the additional meteorological variables ===
@@ -781,9 +736,9 @@ df <- df %>%
   )
 ```
 
-##### Plot
+#### Plot
 
-```{r plot 7}
+```{r plot 6}
 # Filter for 3 random years
 sample_years <- sample(unique(year(df$date)), 3)
 plot_data <- df %>% 
@@ -811,7 +766,7 @@ ggplot(plot_data, aes(x = date)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### 3. Using stochastic weather generators
+#### 3. Using stochastic weather generators
 
 A **Stochastic Weather Generator (SWG)** is a statistical tool used to **simulate long sequences of synthetic weather data** (like rainfall, temperature, solar radiation, wind speed, etc.) that **preserve the statistical properties of observed historical weather** Therefore, it can be used to simulate potential future events within the realms of possibility based on variability in historical events.
 
@@ -826,8 +781,6 @@ The models are **frequently used in climate impact studies** where long weather 
 SWGs are useful because they can preserve long-term patterns in the weather, but **add the much needed stochastic variation that is often lost in counterfactuals**, particularly detrending exercises. They are also **highly flexibility** and can be tweaked to whatever you need, creating realistic alternative versions of an event to explore your health outcome.
 
 Example - using the synthetic multi-heatwave data, a generic ensemble is generated of plausible future daily temperature series (from the end of the dataset, 2020 to 2029) and heatwaves for many years using **Fourier harmonics** (used above) and **single AR(1) and Guassian noise** to incorporate the stochasticity.
-
-#### R Implementation
 
 ```{r swg}
 # === Step 1: Set the parameters ===
@@ -932,9 +885,9 @@ for (s in 1:n_sims) {
 sim_all <- do.call(rbind, sim_list)
 ```
 
-##### Plot
+#### Plot
 
-```{r plot 8}
+```{r plot 7}
 # Tidy the datasets 
 df <- df %>% select(date, temp, is_heatwave)
 sim_plot <- sim_all %>% group_by(date) %>% 
@@ -958,7 +911,7 @@ ggplot() +
   theme_minimal()
 ```
 
-### Communication
+#### Communication
 
 If you're comparing to a **"slightly different event"** world:
 

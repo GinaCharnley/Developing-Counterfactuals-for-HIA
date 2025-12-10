@@ -9,7 +9,7 @@ library(lubridate)
 # ------------------------------
 # 1. Open the NetCDF file
 # ------------------------------
-nc <- nc_open("gmta/Land_and_Ocean_LatLong1.nc")
+nc <- nc_open("03_gmta_processing/Land_and_Ocean_LatLong1.nc")
 
 # ------------------------------
 # 2. Extract coordinate and time variables 
@@ -79,7 +79,7 @@ annual_df <- df_clean %>%
 # ------------------------------
 # 7. Save as CSV
 # ------------------------------
-write.csv(annual_df, "gmta/anomalies.csv", row.names = FALSE)
+write.csv(annual_df, "03_gmta_processing/anomalies.csv", row.names = FALSE)
 
 
 

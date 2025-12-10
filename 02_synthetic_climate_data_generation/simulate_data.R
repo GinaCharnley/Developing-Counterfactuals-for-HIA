@@ -86,7 +86,7 @@ temp_df$temperature <- temp_df$base_temp + temp_df$trend +
 # 5. Save to file
 # ------------------------------
 temp_df <- temp_df %>% select(lat, lon, year, month, temperature)
-write.csv(temp_df, "climate/temperature.csv", row.names = FALSE)
+write.csv(temp_df, "02_synthetic_climate_data_generation/temperature.csv", row.names = FALSE)
 
 # ====== Synthetic Long-term Precipitation & Humidity Data ======
 
@@ -186,8 +186,8 @@ temp_precip_df$humidity_percent <- pmin(pmax(base_humidity +
 precipitation <- temp_precip_df %>% select(lat, lon, year, month, precipitation_mm)
 humidity <- temp_precip_df %>% select(lat, lon, year, month, humidity_percent)
 
-write.csv(precipitation, "climate/precipitation.csv")
-write.csv(humidity, "climate/humidity.csv")
+write.csv(precipitation, "02_synthetic_climate_data_generation/precipitation.csv")
+write.csv(humidity, "02_synthetic_climate_data_generation/humidity.csv")
 
 # ====== Synthetic Temperature Data with Multiple Heatwaves ====== 
 
@@ -275,7 +275,7 @@ df <- df %>% select(-is_hw)
 # ------------------------------
 # 4. Save CSV
 # ------------------------------
-write.csv(df, "climate/synthetic_heatwaves.csv", row.names = FALSE)
+write.csv(df, "02_synthetic_climate_data_generation/synthetic_heatwaves.csv", row.names = FALSE)
 
 
 
