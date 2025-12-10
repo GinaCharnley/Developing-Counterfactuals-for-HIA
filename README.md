@@ -22,11 +22,6 @@ Why attribute health impacts to climate change:
 - Better understand changing transmission dynamics
 - Guide mitigation and resource allocation
 
-<p align="right">
-  <img src="images/hia.png" alt="TDrivers and sources of variation in all-cause disease burden.
-_Source_: Wellcome Trust" width="400">
-</p>
-
 The repository is designed to take you through **developing your own counterfactual for health impact attribution modelling**, rather than using pre-defined datasets. 
 
 The tutorial should be followed using the main R quarto file "01_developing_a_counterfactual.qmd". 
