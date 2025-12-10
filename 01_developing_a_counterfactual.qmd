@@ -56,7 +56,15 @@ Limitations of event-based analysis also include the *exclusion of social determ
 
     2.  **Data-driven decomposition** using the temperature data and two decomposition methods, **Singular Spectrum Analysis** and **Empirical Mode Decomposition**. We give a worked R example using SSA.
 
-3.  
+3.  Next, we look a the **incorporation of greenhouse gas concentrations** as the forcing proxy, rather than using GMTA. Allowing attribution to GHGs, rather than to climate change and global warming more generally.
+
+4.  We move on to c**limate event counterfactuals**, where we explore:
+
+    1.  **World without the event** using Fouriers regression and linear interpolation
+
+    2.  **World with different event** using qualitative storylines, empirical relationships in atmospheric thermodynamics and stochastic weather generators.
+
+5.  Finally, we provide some code for generating **confidence intervals** for your counterfactual climate variables via boostrapping.
 
 ## Data Generation and Processing
 
@@ -248,7 +256,7 @@ To do this, the method is the same as above, however, you can replace the simple
 
 -   **Splines** (natural splines, smoothing splines via `smooth.spline()` or `ns()` from `splines` package)
 
--   **Generalized Additive Models (GAMs)** via the `mgcv` package
+-   **Generalised Additive Models (GAMs)** via the `mgcv` package
 
 Loess or GAM lets the relationship between global anomalies and the local climate variable **change shape** — it’s not forced to be a straight line. As these methods are very similar, the sole difference being the replacement of the linear term with a non-linear term, the data input is the same, along with the communication of the results.
 
@@ -378,87 +386,42 @@ The example below includes the temperature data, with the exploration of concent
 
 ```{r drivers, message=FALSE}
 # === Step 1: Load driver data ===
-emissions <- read_csv("drivers/emissions_data.csv")
-concentration <- read_delim("drivers/concentration_data.csv", 
-                            delim = ";", escape_double = FALSE, trim_ws = TRUE)
+concentration <- read_delim("04_ghg_concentrations_processing/concentration_data.csv",delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
-# === Step 2: Merge drivers to cliamte data ===
-climate_merged <- left_join(climate_merged, emissions)
+# === Step 2: Merge GHG to climate data ===
 climate_merged <- left_join(climate_merged, concentration)
-climate_merged3 <- climate_merged %>% select(lat, lon, year, month, temperature, conc_co2, all_ff_emissions, all_lu_emission)
-climate_merged3 <- na.omit(climate_merged3)
+climate_merged2 <- climate_merged %>% select(lat, lon, year, month, temperature, conc_co2)
+climate_merged2 <- na.omit(climate_merged2)
 
 # === Step 3: Fit the model, calculate forced response and counterfactual ===
-climate_merged3 <- climate_merged3 %>%
+climate_merged2 <- climate_merged2 %>%
   group_by(month) %>%
   mutate(
     trend_conc = predict(lm(temperature ~ conc_co2, data = pick(everything()))),
     conc_cf = temperature - trend_conc + mean(temperature, na.rm = TRUE)
-  ) %>% 
-  mutate(
-    trend_ff_em = predict(lm(temperature ~ all_ff_emissions, data = pick(everything()))),
-    ff_em_cf = temperature - trend_ff_em + mean(temperature, na.rm = TRUE)
-  ) %>%
-  mutate(
-    trend_lu_em = predict(lm(temperature ~ all_lu_emission, data = pick(everything()))),
-    lu_em_cf = temperature - trend_lu_em + mean(temperature, na.rm = TRUE)
   ) %>%
   ungroup()
 ```
 
 #### Plot
 
-Plot the observed v counterfactual for the three different examples.
-
 ```{r plot 3}
 # Group by year and compute annual mean
-annual_loc3 <- climate_merged3 %>%
+annual_loc2 <- climate_merged2 %>%
   group_by(year) %>%
   summarise(
     temp = mean(temperature, na.rm = TRUE),
-    emitter_ff_cf = mean(ff_em_cf, na.rm = TRUE),
-    emitter_lu_cf = mean(lu_em_cf, na.rm = TRUE),
     concen_cf = mean(conc_cf, na.rm = TRUE)
   )
-annual_loc3 <- gather(annual_loc3, forcing, value, 3:5)
 
 # Plot
-ggplot(annual_loc3, aes(x = as.numeric(year))) +
-  geom_line(aes(y = temp), color = "#FF6F61", linewidth = 1, alpha = 0.6) +
-  geom_line(
-    aes(y = value,
-        color = forcing),
-    linewidth = 1,
-    alpha = 0.6
-  ) +
-  scale_color_manual(
-    values = c(
-      "emitter_ff_cf" = "dodgerblue",
-      "emitter_lu_cf" = "#5FD068",
-      "concen_cf" = "purple"
-    ),
-    name = "Counterfactual"
-  ) +
-  facet_wrap(~ forcing, ncol = 1, scales = "free_y", 
-  labeller = as_labeller(c(
-    emitter_ff_cf = "Forcing: Fossil Fuel Emissions",
-    emitter_lu_cf = "Forcing: Land Use Emissions",
-    concen_cf = "Forcing: Carbon Dioxide Concentrations"
-  ))) +
-  theme_minimal(base_size = 13) +
-  labs(
-    title = "Observed vs Counterfactual Annual Temperatures",
-    subtitle = "Each facet compares observed (red) vs counterfactual (color-coded)",
-    y = "Temperature (°C)",
-    x = "Year"
-  ) +
-  theme(
-    text = element_text(face = "bold"),
-    strip.text = element_text(size = 12),
-    plot.title = element_text(size = 14),
-    plot.subtitle = element_text(size = 11),
-    legend.position = "none"
-  )
+ggplot(annual_loc2, aes(x = as.numeric(year))) +
+  geom_line(aes(y = temp), color = "#FF6F61", linewidth = 1, alpha = .6) +
+  geom_line(aes(y = concen_cf), color = "dodgerblue", linewidth = 1, alpha = .6) +
+  theme_minimal() + 
+  labs(title = "Annual Observed (red) vs Counterfactual Temperature using Carbon Dioxide Concentration Forcing (blue)",
+       y = "Temperature (°C)", x = "Year") +  
+  theme(text = element_text(face = "bold"))  
 ```
 
 #### Communication
@@ -473,45 +436,19 @@ e.g., “A X% increase in \[health outcome\] over the study period is attributab
 
 ## Climate Event Counterfactuals
 
-So far these methods have only covered trend-to-trend attribution counterfactuals, but **event-to-event attribution for HIA** is also a growing field. It is particularly important to explore simple and novel methods of developing event counterfactuals for impact studies, as these will not be available in "off-the-shelf" datasets like ISIMIP and DAMIP.
+So far the methods outlined have only covered climate trend counterfactuals, but **event-based attribution for HIA** is also a growing field. It is particularly important to explore simple and novel methods of developing event counterfactuals for impact studies, as these may not be available in "off-the-shelf" datasets.
 
-While trend-to-trend analysis require detrending or ISIMIP scenario data for the counterfactual, event-based attribution is different, and there are a number of methods. The main difference lies in how you **generate the “differing event” scenario** and **how much physical realism you impose**.
-
-Your conceptual steps for performing an event-to-event attribution are as follows:
-
--   **Define your event** and its context
-
-    -   E.g., “July 2022 heatwave in Madrid”
-
-    -   Define health outcome(s): e.g., heat-related mortality, hospital admissions, malaria cases.
-
--   Develop your **factual scenario**
-
-    -   Use observed data (e.g., climate data, exposure, and health outcomes).
-
-    -   Fit a statistical or machine learning model linking the health outcome to relevant predictors.
-
--   Construct the storyline **counterfactual**
-
-    -   Adjust the factual input data to reflect a hypothetical world where the event didn’t happen (e.g., removing the heatwave spike in temperature)/or was slightly different.
-
-    -   Maintain coherence with large-scale conditions (as per the storyline method).
-
--   **Simulate the health outcome** under the counterfactual
-
-    -   Use the same model with counterfactual input data.
-
--   **Compare**
-
-    -   Estimate attributable impact: difference between factual and counterfactual outcomes.
+While trend-based analysis require detrending or ISIMIP scenario data for the counterfactual, event-based attribution is different, and there are a number of methods to generate your climate variable counterfactual. The main difference lies in how you **generate the “differing event” scenario** and **how much physical realism you impose**.
 
 You can either simulate a world **"without the event"**, which can include a trend-style approach e.g., you remove the trend outlier that relates to the event, or you simulate a world with a **"slightly different event"** e.g., a cyclone with 10% faster wind speed, a more slow moving event, an event which takes a different track etc and compare these to your health outcome of interest.
 
+It should be noted here that we are not attributing the extreme event to climate change, but rather the extreme event (or components of the extreme event, which may have been altered by anthropogenic climate change) to the health outcome.
+
 ### “World without the event” Counterfactual
 
-The most simple method to assess the impacts of an extreme event of a health outcome is to simply **remove the outlier** which corresponds to the extreme event e.g., the heatwave, storm etc.
+The most simple method to assess the impacts of an extreme event on a health outcome is to simply **remove the outlier** which corresponds to the extreme event e.g., the heatwave, storm etc.
 
-Two methods are used here to remove the events, the first being **Fourier regression**, which fits sine and cosine waves to capture smooth, repeated seasonal cycles without short-term anomalies (great for period signals, but not for abrupt seasonal transitions) and the second using a **simple time interpolation** (simple linear interpolation which is better for short-term events). You could also use some of the methods explored here including loess splines, GAMs and decomposition methods.
+Two methods are used here to remove the events, the first being **Fourier regression**, which fits sine and cosine waves to capture smooth, repeated seasonal cycles without short-term anomalies (great for period signals, but not for abrupt seasonal transitions) and the second using a **simple time interpolation** (simple linear interpolation which is better for short-term events). You could also use some of the other methods explored here including loess splines, general additive models and decomposition methods.
 
 Fouriers has sine/cosine waves which are called **Fourier harmonics**, these are the trend components and are similar to setting the L and F in SSA and EMD, respectively.
 
@@ -519,7 +456,7 @@ Fouriers has sine/cosine waves which are called **Fourier harmonics**, these are
 
 ```{r no event, message=FALSE}
 # === Step 1: Load simulated heatwave data ===
-df <- read_csv("climate/synthetic_heatwaves.csv")
+df <- read_csv("02_synthetic_climate_data_generation/synthetic_heatwaves.csv")
 
 # === Step 2: Remove event using Fourier seasonal fit ===
 fourier_features <- function(doy, K = 3) {
@@ -558,14 +495,14 @@ plot_data <- df %>%
 # Plot
 ggplot(plot_data, aes(x = date)) +
   geom_line(aes(y = temp, color = "Original"), size = 0.8, alpha = 0.6) +
-  geom_line(aes(y = counterfactual_seasonal, color = "Counterfactual (Seasonal)"), size = 0.8, linetype = "dashed", alpha = 0.8) +
-  geom_line(aes(y = counterfactual_interp, color = "Counterfactual (Interpolated)"), size = 0.8, linetype = "dotted", alpha = 0.8) +
+  geom_line(aes(y = counterfactual_seasonal, color = "Counterfactual (Fouriers)"), size = 0.8, linetype = "dashed", alpha = 0.8) +
+  geom_line(aes(y = counterfactual_interp, color = "Counterfactual (Interpolated)"), size = 0.8, linetype = "dashed", alpha = 0.8) +
   geom_rect(data = plot_data %>% filter(is_heatwave),
             aes(xmin = date - 0.5, xmax = date + 0.5, ymin = -Inf, ymax = Inf),
             fill = "#FF6F61", alpha = 0.15, inherit.aes = FALSE) +
   scale_color_manual(values = c(
     "Original" = "black",
-    "Counterfactual (Seasonal)" = "purple",
+    "Counterfactual (Fouriers)" = "purple",
     "Counterfactual (Interpolated)" = "#5FD068"
   )) +
   facet_wrap(~year_fac, ncol = 1, scales = "free_x") +
@@ -642,7 +579,7 @@ ggplot(plot_data, aes(x = date)) +
 
 #### 2. Based on empirical relationships in atmospheric thermodynamics
 
-Empirical relationships are global estimates and how weather translates regionally can be very different, therefore this is **better for larger spatial scales**. Some important and useful ones for generating a counterfactual include:
+Empirical relationships are global estimates and how weather translates regionally can be very different, therefore this is **better for larger spatial scales**. Some important and useful ones for generating a counterfactual climate variable include:
 
 -   **Clausius-Clapeyron Relation** = *1°C warming* increases *atmospheric moisture by 7%*
 -   **Precipitation Scaling with Temperature** = *1°C warming* increases precipitation by \~*2-3%* (slower than *water vapor* because it is limited by energy balance. However, *extreme precipitation* scales closer to *\~6-10% per °C*, particularly for convective storms.
@@ -674,36 +611,13 @@ $$
 
 Additionally, it should be noted that this could work the other way **to generate a pre-industrial counterfactual** (e.g., 1.5°C cooler).
 
-Example - creating a **2 degrees Celsius counterfactual** for the same heatwave data from above, and sythesises water vapor, precipitation and convective intensity from temperature using the above relationships.
+Example - creating a **2 degrees Celsius counterfactual** for the same temperature data and scaling for precipitation, water vapour and CAPE.
 
 ```{r formulas}
-# === Step 1: Generate the additional meteorological variables ===
-n <- nrow(df)
-
-# Water vapour (g/kg)
-# Typically increases with temperature
-df$q <- 5 + 0.3 * df$temp + rnorm(n, sd = 1)  # simple linear relation
-df$q <- pmax(df$q, 0.1)  # no negative values
-
-# Daily precipitation (mm/day)
-# Heatwaves suppress normal rainfall
-df$P_mean <- rnorm(n, mean = 2, sd = 3)
-df$P_mean[df$P_mean < 0] <- 0
-df$P_mean[df$is_heatwave] <- df$P_mean[df$is_heatwave] * runif(sum(df$is_heatwave), 0, 0.5)
-
-# Precipitation extremes (mm/day)
-# Random extreme events, rare, independent of normal precipitation
-df$P_extreme <- rbinom(n, 1, 0.02) * runif(n, 20, 100)  # 2% chance
-
-# 5d. CAPE (J/kg)
-# Correlates with temperature and humidity
-df$CAPE <- pmax(0, rnorm(n, mean = 500 + 10 * (df$temp - 15) + 5 * (df$q - 10), sd = 200))
-df$CAPE[df$is_heatwave] <- df$CAPE[df$is_heatwave] * runif(sum(df$is_heatwave), 0.7, 1.2)
-
-# === Step 2: Define your warming ===
+# === Step 1: Define your warming ===
 delta_T <- 2  # °C
 
-# === Step 3: Build your counterfactual based on the scaling above ===
+# === Step 2: Build your counterfactual based on the scaling above ===
 df <- df %>%
   dplyr::mutate(
     temp_cf = temp + delta_T,
@@ -739,31 +653,41 @@ df <- df %>%
 #### Plot
 
 ```{r plot 6}
-# Filter for 3 random years
-sample_years <- sample(unique(year(df$date)), 3)
-plot_data <- df %>% 
-  filter(year(date) %in% sample_years, month(date) %in% 6:8) %>%
-  mutate(year_fac = factor(year(date)))
+# Slice one year for visualisation
+sample_year <- sample(unique(year(df$date)), 1)
 
-# I will just plot the precipitation CF as an example using Precipitation Scaling  
+plot_data <- df %>% 
+  filter(year(date) == sample_year,
+         month(date) %in% 6:8)
+
+# Plot precipitation and its counterfactual using the scaling 
 ggplot(plot_data, aes(x = date)) +
-  geom_line(aes(y = P_mean, color = "Original"), size = 0.8, alpha = .4) +
-  geom_line(aes(y = P_mean_cf, color = "Counterfactual (P/T Scaling)"), size = 0.8, linetype = "dashed", alpha =.8) +
-  geom_rect(data = plot_data %>% filter(is_heatwave),
-            aes(xmin = date - 0.5, xmax = date + 0.5, ymin = -Inf, ymax = Inf),
-            fill = "#FF6F61", alpha = 0.15, inherit.aes = FALSE) +
-  scale_color_manual(values = c(
-    "Original" = "black",
-    "Counterfactual (P/T Scaling)" = "purple"
+  geom_line(aes(y = P_mean,    colour = "Observed"),      size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = P_mean_cf, colour = "Counterfactual"), size = 0.8, linetype = "dashed", alpha = 0.9) +
+  geom_rect(
+    data = plot_data %>% filter(is_heatwave),
+    aes(xmin = date - 0.5, xmax = date + 0.5,
+        ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE,
+    fill = "#FF6F61", alpha = 0.15
+  ) +
+  scale_colour_manual(values = c(
+    "Observed"      = "black",
+    "Counterfactual" = "purple"
   )) +
-  facet_wrap(~year_fac, ncol = 1, scales = "free_x") +
   scale_x_date(date_labels = "%b %d", date_breaks = "1 week") +
-  labs(title = "Precipitation during Synthetic Summers with Multiple Heatwaves",
-       y = "Precipitation (mm)", x = "Date", color = "Series") +
+  labs(
+    title  = paste("Precipitation and Counterfactual\nSummer", sample_year),
+    x      = "Date",
+    y      = "Precipitation (mm)",
+    colour = "Series"
+  ) +
   theme_minimal(base_size = 12) +
-  theme(legend.position = "top", 
-        text = element_text(face = "bold"),
-        axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(
+    legend.position = "top",
+    text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ```
 
 #### 3. Using stochastic weather generators
@@ -778,13 +702,13 @@ In simple terms:
 
 The models are **frequently used in climate impact studies** where long weather series are needed to test how a system responds to different climate conditions. It therefore is a good way of simulating future events but still **maintaining physical realism.**
 
-SWGs are useful because they can preserve long-term patterns in the weather, but **add the much needed stochastic variation that is often lost in counterfactuals**, particularly detrending exercises. They are also **highly flexibility** and can be tweaked to whatever you need, creating realistic alternative versions of an event to explore your health outcome.
+SWGs are useful because they can preserve long-term patterns in the weather, but **add the much needed stochastic variation that is lost in counterfactuals climate varaibles**, particularly detrending exercises. They are also **highly flexibility** and can be tweaked to whatever you need, creating realistic alternative versions of an event to explore your health outcome.
 
-Example - using the synthetic multi-heatwave data, a generic ensemble is generated of plausible future daily temperature series (from the end of the dataset, 2020 to 2029) and heatwaves for many years using **Fourier harmonics** (used above) and **single AR(1) and Guassian noise** to incorporate the stochasticity.
+Example - using the synthetic heatwave temperature data, a generic ensemble is generated of plausible future daily temperature series (from the end of the dataset, 2020 to 2029) and heatwaves for many years using **Fourier harmonics** (used above) and **single AR(1) and Guassian noise** to incorporate the stochasticity.
 
 ```{r swg}
 # === Step 1: Set the parameters ===
-input_csv <- "climate/synthetic_heatwaves.csv"
+input_csv <- "02_synthetic_climate_data_generation/synthetic_heatwaves.csv"
 simulate_years <- 10          # number of future years to simulate
 start_sim_year <- 2020        # start year
 n_sims <- 200                 # number of ensemble realizations
@@ -905,10 +829,10 @@ ggplot() +
   geom_ribbon(data = sim_plot, aes(x = date, ymin = temp_ci_lower, ymax = temp_ci_upper), 
               fill = "#FF6F61", alpha = 0.2) +
   geom_vline(xintercept = as.numeric(transition_date), linetype = "dashed") +
+  theme_minimal() + 
   theme(text = element_text(face = "bold")) + 
   labs(x = "Date", y = "Temperature", 
-       title = "Historical and Projected Temperatures") +
-  theme_minimal()
+       title = "Historical and Projected Temperatures") 
 ```
 
 #### Communication

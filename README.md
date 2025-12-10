@@ -27,19 +27,18 @@ Why attribute health impacts to climate change:
 _Source_: Wellcome Trust" width="400">
 </p>
 
-The repository is designed to take you through **developing your own counterfactual for health impact attribution modelling**, rather than using pre-defined datasets such as ISIMIP and DAMIP. 
+The repository is designed to take you through **developing your own counterfactual for health impact attribution modelling**, rather than using pre-defined datasets. 
 
-The tutorial should be followed using the main R quarto file "developing_a_counterfactual.qmd". 
+The tutorial should be followed using the main R quarto file "01_developing_a_counterfactual.qmd". 
 
 The repository is structured into a main markdown/quarto file, which takes you through the full tutorial, along with several folders which contain data and additional exercises: 
-1. **climate**: Includes a small sample of climate data to run some of the analysis, including temperature, relative humidity and precipitation data 
-2. **drivers**: Has a file labled "raw" with the original emissions and concentraionts files, along with a clean concentrations and emissions dataset and a script which takes you through the cleaning process and provides more details on climate drivers and possible data sources.
-3. **extremes**: Contains a script for simulating an extremes dataset, in this case heatwaves along with the simulated data, and the additional data generated through the SWG explored in the repository. There is a script which includes an additionaly, more complex SWG that the one explored in the markdown. 
-4. **gmta**: Includes the chosen raw GMTA dataset used here (Berkley)
+1. **02_synthetic_climate_data_generation**: Generates the synthetic climate data used to explore the methods in the tutorial. 
+2. **03_gmta_processing**: Includes the script to process the raw GMTA dataset used here (Berkley Earth) and the clean data
+3. **04_ghg_concentrations_processing**: A clean concentrations dataset and a script which takes you through the cleaning process and provides more details on greenhouse gas concentrations and possible data sources.
 
 Topics explored in the tutorial include: 
 
-**Trend counterfactuals**
+**Climate Trend Counterfactuals**
 - Detrending 
 - ATTRICI & Linear-based residual detrending
 - GMTAs 
@@ -47,10 +46,10 @@ Topics explored in the tutorial include:
 - Counterfactuals without GMTAs
 - Singular Spectrum Analysis 
 - Empirical Mode Decomposition 
-- Non-temperature counterfactuals & using GMTAs as a forcing proxy
-- Incorporation of drivers and emissions 
+- Non-temperature counterfactuals 
+- Incorporation of greenhouse gas concentrations
 
-**Event counterfactuals**
+**Climate Event Counterfactuals**
 - Counterfactuals without the event 
 - Fourier regression 
 - Linear time interpolation 

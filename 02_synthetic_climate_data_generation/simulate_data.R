@@ -189,7 +189,7 @@ humidity <- temp_precip_df %>% select(lat, lon, year, month, humidity_percent)
 write.csv(precipitation, "02_synthetic_climate_data_generation/precipitation.csv")
 write.csv(humidity, "02_synthetic_climate_data_generation/humidity.csv")
 
-# ====== Synthetic Temperature Data with Multiple Heatwaves ====== 
+# ====== Synthetic Climate Data with Multiple Heatwaves ====== 
 
 set.seed(1234)
 
@@ -273,7 +273,31 @@ df$is_heatwave[df$is_forced_heatwave] <- TRUE  # ensure inserted ones are marked
 df <- df %>% select(-is_hw)
 
 # ------------------------------
-# 4. Save CSV
+# 4. Process additional variables related to temperature
+# ------------------------------
+
+# Water vapour (g/kg)
+# Typically increases with temperature
+df$q <- 5 + 0.3 * df$temp + rnorm(n, sd = 1)  # simple linear relation
+df$q <- pmax(df$q, 0.1)  # no negative values
+
+# Daily precipitation (mm/day)
+# Heatwaves suppress normal rainfall
+df$P_mean <- rnorm(n, mean = 2, sd = 3)
+df$P_mean[df$P_mean < 0] <- 0
+df$P_mean[df$is_heatwave] <- df$P_mean[df$is_heatwave] * runif(sum(df$is_heatwave), 0, 0.5)
+
+# Precipitation extremes (mm/day)
+# Random extreme events, rare, independent of normal precipitation
+df$P_extreme <- rbinom(n, 1, 0.02) * runif(n, 20, 100)  # 2% chance
+
+# CAPE (J/kg)
+# Correlates with temperature and humidity
+df$CAPE <- pmax(0, rnorm(n, mean = 500 + 10 * (df$temp - 15) + 5 * (df$q - 10), sd = 200))
+df$CAPE[df$is_heatwave] <- df$CAPE[df$is_heatwave] * runif(sum(df$is_heatwave), 0.7, 1.2)
+
+# ------------------------------
+# 5. Save CSV
 # ------------------------------
 write.csv(df, "02_synthetic_climate_data_generation/synthetic_heatwaves.csv", row.names = FALSE)
 
